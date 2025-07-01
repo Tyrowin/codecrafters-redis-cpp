@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
   // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
-  // Accept client connection and handle PING command
+  // Accept client connection and handle multiple PING commands
   int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   if (client_fd < 0) {
     std::cerr << "Failed to accept client connection\n";
@@ -60,12 +60,27 @@ int main(int argc, char **argv) {
   
   std::cout << "Client connected\n";
   
-  // Send PONG response (hardcoded for now)
+  // Handle multiple commands from the same client
+  char buffer[1024];
   const char* response = "+PONG\r\n";
-  if (send(client_fd, response, strlen(response), 0) < 0) {
-    std::cerr << "Failed to send response\n";
+  
+  while (true) {
+    // Read incoming data (we don't need to parse it yet)
+    ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+    
+    if (bytes_received <= 0) {
+      // Client disconnected or error occurred
+      break;
+    }
+    
+    // Send PONG response (hardcoded for now)
+    if (send(client_fd, response, strlen(response), 0) < 0) {
+      std::cerr << "Failed to send response\n";
+      break;
+    }
   }
   
+  std::cout << "Client disconnected\n";
   close(client_fd);
   close(server_fd);
 
