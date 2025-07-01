@@ -50,11 +50,23 @@ int main(int argc, char **argv) {
   // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
-  // Uncomment this block to pass the first stage
+  // Accept client connection and handle PING command
+  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+  if (client_fd < 0) {
+    std::cerr << "Failed to accept client connection\n";
+    close(server_fd);
+    return 1;
+  }
   
-  accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n";
   
+  // Send PONG response (hardcoded for now)
+  const char* response = "+PONG\r\n";
+  if (send(client_fd, response, strlen(response), 0) < 0) {
+    std::cerr << "Failed to send response\n";
+  }
+  
+  close(client_fd);
   close(server_fd);
 
   return 0;
