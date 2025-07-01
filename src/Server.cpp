@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/select.h>
+#include <set>
+#include <algorithm>
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -43,45 +46,86 @@ int main(int argc, char **argv) {
     return 1;
   }
   
-  struct sockaddr_in client_addr;
-  int client_addr_len = sizeof(client_addr);
-  std::cout << "Waiting for a client to connect...\n";
-
-  // You can use print statements as follows for debugging, they'll be visible when running tests.
+  std::cout << "Server listening on port 6379...\n";
   std::cout << "Logs from your program will appear here!\n";
 
-  // Accept client connection and handle multiple PING commands
-  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  if (client_fd < 0) {
-    std::cerr << "Failed to accept client connection\n";
-    close(server_fd);
-    return 1;
-  }
+  // Set to keep track of all client file descriptors
+  std::set<int> client_fds;
   
-  std::cout << "Client connected\n";
-  
-  // Handle multiple commands from the same client
+  // Buffer for reading client data
   char buffer[1024];
   const char* response = "+PONG\r\n";
   
+  // Main event loop
   while (true) {
-    // Read incoming data (we don't need to parse it yet)
-    ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
     
-    if (bytes_received <= 0) {
-      // Client disconnected or error occurred
+    // Add server socket to the set
+    FD_SET(server_fd, &read_fds);
+    int max_fd = server_fd;
+    
+    // Add all client sockets to the set
+    for (int client_fd : client_fds) {
+      FD_SET(client_fd, &read_fds);
+      max_fd = std::max(max_fd, client_fd);
+    }
+    
+    // Wait for activity on any socket
+    int activity = select(max_fd + 1, &read_fds, nullptr, nullptr, nullptr);
+    
+    if (activity < 0) {
+      std::cerr << "select() failed\n";
       break;
     }
     
-    // Send PONG response (hardcoded for now)
-    if (send(client_fd, response, strlen(response), 0) < 0) {
-      std::cerr << "Failed to send response\n";
-      break;
+    // Check if there's a new connection on the server socket
+    if (FD_ISSET(server_fd, &read_fds)) {
+      struct sockaddr_in client_addr;
+      int client_addr_len = sizeof(client_addr);
+      
+      int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+      if (client_fd < 0) {
+        std::cerr << "Failed to accept client connection\n";
+        continue;
+      }
+      
+      client_fds.insert(client_fd);
+      std::cout << "New client connected (fd: " << client_fd << ")\n";
+    }
+    
+    // Check all client sockets for incoming data
+    for (auto it = client_fds.begin(); it != client_fds.end();) {
+      int client_fd = *it;
+      
+      if (FD_ISSET(client_fd, &read_fds)) {
+        ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+        
+        if (bytes_received <= 0) {
+          // Client disconnected or error occurred
+          std::cout << "Client disconnected (fd: " << client_fd << ")\n";
+          close(client_fd);
+          it = client_fds.erase(it);
+        } else {
+          // Send PONG response (hardcoded for now)
+          if (send(client_fd, response, strlen(response), 0) < 0) {
+            std::cerr << "Failed to send response to client (fd: " << client_fd << ")\n";
+            close(client_fd);
+            it = client_fds.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      } else {
+        ++it;
+      }
     }
   }
   
-  std::cout << "Client disconnected\n";
-  close(client_fd);
+  // Clean up all client connections
+  for (int client_fd : client_fds) {
+    close(client_fd);
+  }
   close(server_fd);
 
   return 0;
