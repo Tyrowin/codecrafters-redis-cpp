@@ -10,6 +10,75 @@
 #include <sys/select.h>
 #include <set>
 #include <algorithm>
+#include <vector>
+#include <sstream>
+
+// Parse RESP array and extract command and arguments
+std::vector<std::string> parseRESPArray(const std::string& data) {
+  std::vector<std::string> result;
+  std::istringstream iss(data);
+  std::string line;
+  
+  if (!std::getline(iss, line) || line.empty() || line[0] != '*') {
+    return result; // Not a valid RESP array
+  }
+  
+  // Remove \r if present
+  if (!line.empty() && line.back() == '\r') {
+    line.pop_back();
+  }
+  
+  int numElements = std::stoi(line.substr(1));
+  
+  for (int i = 0; i < numElements; i++) {
+    // Read bulk string length line
+    if (!std::getline(iss, line)) break;
+    if (line.empty() || line[0] != '$') break;
+    
+    // Remove \r if present
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    
+    int length = std::stoi(line.substr(1));
+    
+    // Read the actual string
+    if (!std::getline(iss, line)) break;
+    
+    // Remove \r if present
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    
+    result.push_back(line);
+  }
+  
+  return result;
+}
+
+// Handle Redis commands
+std::string handleCommand(const std::vector<std::string>& command) {
+  if (command.empty()) {
+    return "-ERR empty command\r\n";
+  }
+  
+  std::string cmd = command[0];
+  // Convert to uppercase for case-insensitive comparison
+  std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::toupper);
+  
+  if (cmd == "PING") {
+    return "+PONG\r\n";
+  } else if (cmd == "ECHO") {
+    if (command.size() < 2) {
+      return "-ERR wrong number of arguments for 'echo' command\r\n";
+    }
+    // Return as RESP bulk string
+    std::string arg = command[1];
+    return "$" + std::to_string(arg.length()) + "\r\n" + arg + "\r\n";
+  } else {
+    return "-ERR unknown command '" + command[0] + "'\r\n";
+  }
+}
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -54,7 +123,6 @@ int main(int argc, char **argv) {
   
   // Buffer for reading client data
   char buffer[1024];
-  const char* response = "+PONG\r\n";
   
   // Main event loop
   while (true) {
@@ -107,8 +175,18 @@ int main(int argc, char **argv) {
           close(client_fd);
           it = client_fds.erase(it);
         } else {
-          // Send PONG response (hardcoded for now)
-          if (send(client_fd, response, strlen(response), 0) < 0) {
+          // Null-terminate the received data
+          buffer[bytes_received] = '\0';
+          std::string receivedData(buffer, bytes_received);
+          
+          // Parse the Redis command
+          std::vector<std::string> command = parseRESPArray(receivedData);
+          
+          // Handle the command and get response
+          std::string response = handleCommand(command);
+          
+          // Send response
+          if (send(client_fd, response.c_str(), response.length(), 0) < 0) {
             std::cerr << "Failed to send response to client (fd: " << client_fd << ")\n";
             close(client_fd);
             it = client_fds.erase(it);
