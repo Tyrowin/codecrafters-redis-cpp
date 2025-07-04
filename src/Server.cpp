@@ -12,6 +12,10 @@
 #include <algorithm>
 #include <vector>
 #include <sstream>
+#include <unordered_map>
+
+// Global data store for Redis key-value pairs
+std::unordered_map<std::string, std::string> dataStore;
 
 // Parse RESP array and extract command and arguments
 std::vector<std::string> parseRESPArray(const std::string& data) {
@@ -75,6 +79,27 @@ std::string handleCommand(const std::vector<std::string>& command) {
     // Return as RESP bulk string
     std::string arg = command[1];
     return "$" + std::to_string(arg.length()) + "\r\n" + arg + "\r\n";
+  } else if (cmd == "SET") {
+    if (command.size() < 3) {
+      return "-ERR wrong number of arguments for 'set' command\r\n";
+    }
+    // Store the key-value pair
+    dataStore[command[1]] = command[2];
+    return "+OK\r\n";
+  } else if (cmd == "GET") {
+    if (command.size() < 2) {
+      return "-ERR wrong number of arguments for 'get' command\r\n";
+    }
+    // Retrieve the value for the key
+    auto it = dataStore.find(command[1]);
+    if (it != dataStore.end()) {
+      // Return as RESP bulk string
+      const std::string& value = it->second;
+      return "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
+    } else {
+      // Return null bulk string for non-existent key
+      return "$-1\r\n";
+    }
   } else {
     return "-ERR unknown command '" + command[0] + "'\r\n";
   }
