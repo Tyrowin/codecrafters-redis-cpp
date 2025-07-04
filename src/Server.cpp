@@ -30,6 +30,12 @@ struct ValueWithExpiry {
 // Global data store for Redis key-value pairs with expiry support
 std::unordered_map<std::string, ValueWithExpiry> dataStore;
 
+// Configuration structure for Redis server
+struct Config {
+    std::string dir;
+    std::string dbfilename;
+} config;
+
 // Parse RESP array and extract command and arguments
 std::vector<std::string> parseRESPArray(const std::string& data) {
   std::vector<std::string> result;
@@ -140,6 +146,36 @@ std::string handleCommand(const std::vector<std::string>& command) {
       // Return null bulk string for non-existent key
       return "$-1\r\n";
     }
+  } else if (cmd == "CONFIG") {
+    if (command.size() < 3) {
+      return "-ERR wrong number of arguments for 'config' command\r\n";
+    }
+    
+    std::string subcmd = command[1];
+    std::transform(subcmd.begin(), subcmd.end(), subcmd.begin(), ::toupper);
+    
+    if (subcmd == "GET") {
+      std::string param = command[2];
+      std::transform(param.begin(), param.end(), param.begin(), ::tolower);
+      
+      std::string value;
+      if (param == "dir") {
+        value = config.dir;
+      } else if (param == "dbfilename") {
+        value = config.dbfilename;
+      } else {
+        // Return empty array for unknown parameter
+        return "*0\r\n";
+      }
+      
+      // Return RESP array with parameter name and value
+      std::string response = "*2\r\n";
+      response += "$" + std::to_string(param.length()) + "\r\n" + param + "\r\n";
+      response += "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
+      return response;
+    } else {
+      return "-ERR Unknown CONFIG subcommand\r\n";
+    }
   } else {
     return "-ERR unknown command '" + command[0] + "'\r\n";
   }
@@ -149,6 +185,19 @@ int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
+  
+  // Initialize default configuration values
+  config.dir = ".";
+  config.dbfilename = "dump.rdb";
+  
+  // Parse command line arguments
+  for (int i = 1; i < argc; i++) {
+    if (std::string(argv[i]) == "--dir" && i + 1 < argc) {
+      config.dir = argv[++i];
+    } else if (std::string(argv[i]) == "--dbfilename" && i + 1 < argc) {
+      config.dbfilename = argv[++i];
+    }
+  }
   
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
