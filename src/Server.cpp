@@ -13,9 +13,22 @@
 #include <vector>
 #include <sstream>
 #include <unordered_map>
+#include <chrono>
 
-// Global data store for Redis key-value pairs
-std::unordered_map<std::string, std::string> dataStore;
+// Structure to store value with optional expiry time
+struct ValueWithExpiry {
+  std::string value;
+  std::chrono::steady_clock::time_point expiryTime;
+  bool hasExpiry;
+  
+  ValueWithExpiry() : hasExpiry(false) {}
+  ValueWithExpiry(const std::string& val) : value(val), hasExpiry(false) {}
+  ValueWithExpiry(const std::string& val, std::chrono::steady_clock::time_point expiry) 
+    : value(val), expiryTime(expiry), hasExpiry(true) {}
+};
+
+// Global data store for Redis key-value pairs with expiry support
+std::unordered_map<std::string, ValueWithExpiry> dataStore;
 
 // Parse RESP array and extract command and arguments
 std::vector<std::string> parseRESPArray(const std::string& data) {
@@ -83,8 +96,26 @@ std::string handleCommand(const std::vector<std::string>& command) {
     if (command.size() < 3) {
       return "-ERR wrong number of arguments for 'set' command\r\n";
     }
-    // Store the key-value pair
-    dataStore[command[1]] = command[2];
+    
+    // Check for PX argument
+    if (command.size() >= 5) {
+      std::string option = command[3];
+      std::transform(option.begin(), option.end(), option.begin(), ::toupper);
+      
+      if (option == "PX") {
+        try {
+          int expiryMs = std::stoi(command[4]);
+          auto expiryTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(expiryMs);
+          dataStore[command[1]] = ValueWithExpiry(command[2], expiryTime);
+          return "+OK\r\n";
+        } catch (const std::exception& e) {
+          return "-ERR invalid expire time in 'set' command\r\n";
+        }
+      }
+    }
+    
+    // Store without expiry
+    dataStore[command[1]] = ValueWithExpiry(command[2]);
     return "+OK\r\n";
   } else if (cmd == "GET") {
     if (command.size() < 2) {
@@ -93,8 +124,17 @@ std::string handleCommand(const std::vector<std::string>& command) {
     // Retrieve the value for the key
     auto it = dataStore.find(command[1]);
     if (it != dataStore.end()) {
+      // Check if key has expired
+      if (it->second.hasExpiry) {
+        auto now = std::chrono::steady_clock::now();
+        if (now >= it->second.expiryTime) {
+          // Key has expired, remove it and return null
+          dataStore.erase(it);
+          return "$-1\r\n";
+        }
+      }
       // Return as RESP bulk string
-      const std::string& value = it->second;
+      const std::string& value = it->second.value;
       return "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
     } else {
       // Return null bulk string for non-existent key
