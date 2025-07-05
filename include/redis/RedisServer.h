@@ -26,8 +26,10 @@ class RedisServer {
 
   int serverFd_;
   std::set<int> clientFds_;
+  int masterFd_;
 
   bool createServerSocket();
+  bool connectToMaster();
   void handleNewConnection();
   void handleClientData(int clientFd);
   void closeClient(int clientFd);
