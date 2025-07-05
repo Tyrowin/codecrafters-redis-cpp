@@ -1,12 +1,15 @@
 #include "redis/Config.h"
 #include <cstring>
+#include <sstream>
 
 namespace redis {
 
 Config::Config() 
     : dir_("."), 
       dbfilename_("dump.rdb"), 
-      port_(6379) {
+      port_(6379),
+      masterHost_(""),
+      masterPort_(0) {
 }
 
 void Config::parseArgs(int argc, char** argv) {
@@ -17,6 +20,11 @@ void Config::parseArgs(int argc, char** argv) {
             dbfilename_ = argv[++i];
         } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
             port_ = std::stoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--replicaof") == 0 && i + 1 < argc) {
+            // Parse "host port" from the next argument
+            std::string replicaof = argv[++i];
+            std::istringstream iss(replicaof);
+            iss >> masterHost_ >> masterPort_;
         }
     }
 }
