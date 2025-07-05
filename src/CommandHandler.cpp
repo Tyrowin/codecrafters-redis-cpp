@@ -139,7 +139,14 @@ std::string CommandHandler::handleInfo(const std::vector<std::string>& args) {
         if (section == "replication") {
             // Return replication info as a bulk string
             std::string role = config_->isReplica() ? "slave" : "master";
-            std::string info = "role:" + role;
+            std::string info = "role:" + role + "\r\n";
+            
+            // Add master_replid and master_repl_offset for master nodes
+            if (!config_->isReplica()) {
+                info += "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n";
+                info += "master_repl_offset:0";
+            }
+            
             return RESPParser::encodeBulkString(info);
         }
     }
