@@ -138,7 +138,8 @@ std::string CommandHandler::handleInfo(const std::vector<std::string>& args) {
         
         if (section == "replication") {
             // Return replication info as a bulk string
-            std::string info = "role:master";
+            std::string role = config_->isReplica() ? "slave" : "master";
+            std::string info = "role:" + role;
             return RESPParser::encodeBulkString(info);
         }
     }
