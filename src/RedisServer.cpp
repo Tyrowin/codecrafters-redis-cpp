@@ -1,6 +1,7 @@
 #include "redis/RedisServer.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -22,7 +23,8 @@ RedisServer::RedisServer(std::shared_ptr<Config> config)
     : config_(config),
       storage_(std::make_shared<Storage>()),
       commandHandler_(std::make_shared<CommandHandler>(config, storage_)),
-      serverFd_(-1) {}
+      serverFd_(-1),
+      masterFd_(-1) {}
 
 RedisServer::~RedisServer() {
   for (int fd : clientFds_) {
@@ -30,6 +32,9 @@ RedisServer::~RedisServer() {
   }
   if (serverFd_ != -1) {
     close(serverFd_);
+  }
+  if (masterFd_ != -1) {
+    close(masterFd_);
   }
 }
 
@@ -69,12 +74,71 @@ bool RedisServer::createServerSocket() {
   return true;
 }
 
+bool RedisServer::connectToMaster() {
+  masterFd_ = socket(AF_INET, SOCK_STREAM, 0);
+  if (masterFd_ < 0) {
+    std::cerr << "Failed to create socket for master connection\n";
+    return false;
+  }
+
+  struct sockaddr_in master_addr;
+  master_addr.sin_family = AF_INET;
+  master_addr.sin_port = htons(config_->getMasterPort());
+
+  // Try to parse as IP address first
+  if (inet_pton(AF_INET, config_->getMasterHost().c_str(),
+                &master_addr.sin_addr) <= 0) {
+    // If not an IP, try to resolve hostname
+    struct hostent *host = gethostbyname(config_->getMasterHost().c_str());
+    if (host == nullptr) {
+      std::cerr << "Failed to resolve master hostname: "
+                << config_->getMasterHost() << "\n";
+      close(masterFd_);
+      masterFd_ = -1;
+      return false;
+    }
+    memcpy(&master_addr.sin_addr, host->h_addr, host->h_length);
+  }
+
+  if (connect(masterFd_, (struct sockaddr *)&master_addr, sizeof(master_addr)) <
+      0) {
+    std::cerr << "Failed to connect to master at " << config_->getMasterHost()
+              << ":" << config_->getMasterPort() << "\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+
+  std::cout << "Connected to master at " << config_->getMasterHost() << ":"
+            << config_->getMasterPort() << "\n";
+
+  // Send PING command as part of the handshake
+  std::string pingCommand = RESPParser::encodeArray({"PING"});
+  if (send(masterFd_, pingCommand.c_str(), pingCommand.length(), 0) < 0) {
+    std::cerr << "Failed to send PING to master\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+
+  std::cout << "Sent PING to master\n";
+  return true;
+}
+
 void RedisServer::run() {
   if (!createServerSocket()) {
     return;
   }
 
   loadRDBFile();
+
+  // If we're a replica, connect to master
+  if (config_->isReplica()) {
+    if (!connectToMaster()) {
+      std::cerr << "Failed to connect to master, exiting\n";
+      return;
+    }
+  }
 
   std::cout << "Logs from your program will appear here!" << std::endl;
 
