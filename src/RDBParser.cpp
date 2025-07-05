@@ -122,7 +122,7 @@ bool RDBParser::readDatabase(Storage& storage) {
                     auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                         now.time_since_epoch()).count();
                     
-                    if (expiryTime > nowMs) {
+                    if (expiryTime > static_cast<uint64_t>(nowMs)) {
                         int64_t durationMs = expiryTime - nowMs;
                         storage.setWithExpiry(key, value, durationMs);
                     }

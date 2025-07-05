@@ -7,7 +7,7 @@ void Storage::set(const std::string& key, const std::string& value) {
     data_[key] = ValueWithExpiry(value);
 }
 
-void Storage::setWithExpiry(const std::string& key, const std::string& value, int expiryMs) {
+void Storage::setWithExpiry(const std::string& key, const std::string& value, int64_t expiryMs) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto expiryTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(expiryMs);
     data_[key] = ValueWithExpiry(value, expiryTime);
