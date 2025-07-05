@@ -25,7 +25,7 @@ public:
     Storage() = default;
     
     void set(const std::string& key, const std::string& value);
-    void setWithExpiry(const std::string& key, const std::string& value, int expiryMs);
+    void setWithExpiry(const std::string& key, const std::string& value, int64_t expiryMs);
     std::optional<std::string> get(const std::string& key);
     std::vector<std::string> getAllKeys();
     
