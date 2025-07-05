@@ -26,6 +26,7 @@ private:
     std::string handleGet(const std::vector<std::string>& args);
     std::string handleConfig(const std::vector<std::string>& args);
     std::string handleKeys(const std::vector<std::string>& args);
+    std::string handleInfo(const std::vector<std::string>& args);
 };
 
 } // namespace redis
