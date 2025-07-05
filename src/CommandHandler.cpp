@@ -31,6 +31,8 @@ std::string CommandHandler::handleCommand(const std::vector<std::string>& comman
         return handleConfig(std::vector<std::string>(command.begin() + 1, command.end()));
     } else if (cmd == "KEYS") {
         return handleKeys(std::vector<std::string>(command.begin() + 1, command.end()));
+    } else if (cmd == "INFO") {
+        return handleInfo(std::vector<std::string>(command.begin() + 1, command.end()));
     } else {
         return RESPParser::encodeError("ERR unknown command '" + command[0] + "'");
     }
@@ -126,6 +128,23 @@ std::string CommandHandler::handleKeys(const std::vector<std::string>& args) {
     
     auto keys = storage_->getAllKeys();
     return RESPParser::encodeArray(keys);
+}
+
+std::string CommandHandler::handleInfo(const std::vector<std::string>& args) {
+    // Check if the command has arguments and if it's "replication"
+    if (!args.empty()) {
+        std::string section = args[0];
+        std::transform(section.begin(), section.end(), section.begin(), ::tolower);
+        
+        if (section == "replication") {
+            // Return replication info as a bulk string
+            std::string info = "role:master";
+            return RESPParser::encodeBulkString(info);
+        }
+    }
+    
+    // For now, only support the replication section
+    return RESPParser::encodeError("ERR wrong section for 'info' command");
 }
 
 } // namespace redis
