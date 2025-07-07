@@ -49,12 +49,12 @@ std::string RESPParser::parseSimpleString(const std::string& data) {
   if (data.empty() || data[0] != '+') {
     return "";
   }
-  
+
   size_t end = data.find("\r\n");
   if (end == std::string::npos) {
     return "";
   }
-  
+
   return data.substr(1, end - 1);
 }
 
