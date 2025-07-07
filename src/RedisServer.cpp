@@ -121,7 +121,86 @@ bool RedisServer::connectToMaster() {
     return false;
   }
 
-  std::cout << "Sent PING to master\n";
+  // Receive PONG response
+  char buffer[256];
+  int bytesRead = recv(masterFd_, buffer, sizeof(buffer), 0);
+  if (bytesRead <= 0) {
+    std::cerr << "Failed to receive PONG from master\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::string pongResponse(buffer, bytesRead);
+  std::string parsedResponse = RESPParser::parseSimpleString(pongResponse);
+  if (parsedResponse != "PONG") {
+    std::cerr << "Unexpected response to PING: " << parsedResponse << "\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::cout << "Received PONG from master\n";
+  
+  // Send REPLCONF listening-port
+  std::string replconfPort = RESPParser::encodeArray({"REPLCONF", "listening-port", std::to_string(config_->getPort())});
+  if (send(masterFd_, replconfPort.c_str(), replconfPort.length(), 0) < 0) {
+    std::cerr << "Failed to send REPLCONF listening-port to master\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  // Receive OK response
+  bytesRead = recv(masterFd_, buffer, sizeof(buffer), 0);
+  if (bytesRead <= 0) {
+    std::cerr << "Failed to receive response to REPLCONF listening-port\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::string okResponse1(buffer, bytesRead);
+  parsedResponse = RESPParser::parseSimpleString(okResponse1);
+  if (parsedResponse != "OK") {
+    std::cerr << "Unexpected response to REPLCONF listening-port: " << parsedResponse << "\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::cout << "Sent REPLCONF listening-port\n";
+  
+  // Send REPLCONF capa psync2
+  std::string replconfCapa = RESPParser::encodeArray({"REPLCONF", "capa", "psync2"});
+  if (send(masterFd_, replconfCapa.c_str(), replconfCapa.length(), 0) < 0) {
+    std::cerr << "Failed to send REPLCONF capa to master\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  // Receive OK response
+  bytesRead = recv(masterFd_, buffer, sizeof(buffer), 0);
+  if (bytesRead <= 0) {
+    std::cerr << "Failed to receive response to REPLCONF capa\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::string okResponse2(buffer, bytesRead);
+  parsedResponse = RESPParser::parseSimpleString(okResponse2);
+  if (parsedResponse != "OK") {
+    std::cerr << "Unexpected response to REPLCONF capa: " << parsedResponse << "\n";
+    close(masterFd_);
+    masterFd_ = -1;
+    return false;
+  }
+  
+  std::cout << "Sent REPLCONF capa psync2\n";
+  std::cout << "Handshake with master completed successfully\n";
+  
   return true;
 }
 
