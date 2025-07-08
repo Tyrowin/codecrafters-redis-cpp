@@ -42,6 +42,9 @@ std::string CommandHandler::handleCommand(
   } else if (cmd == "INFO") {
     return handleInfo(
         std::vector<std::string>(command.begin() + 1, command.end()));
+  } else if (cmd == "REPLCONF") {
+    return handleReplconf(
+        std::vector<std::string>(command.begin() + 1, command.end()));
   } else {
     return RESPParser::encodeError("ERR unknown command '" + command[0] + "'");
   }
@@ -168,6 +171,13 @@ std::string CommandHandler::handleInfo(const std::vector<std::string>& args) {
 
   // For now, only support the replication section
   return RESPParser::encodeError("ERR wrong section for 'info' command");
+}
+
+std::string CommandHandler::handleReplconf(
+    const std::vector<std::string>& args) {
+  // For the purposes of this challenge, we ignore the arguments
+  // and just respond with +OK\r\n
+  return RESPParser::encodeSimpleString("OK");
 }
 
 }  // namespace redis
