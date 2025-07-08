@@ -28,6 +28,7 @@ class CommandHandler {
   std::string handleConfig(const std::vector<std::string> &args);
   std::string handleKeys(const std::vector<std::string> &args);
   std::string handleInfo(const std::vector<std::string> &args);
+  std::string handleReplconf(const std::vector<std::string> &args);
 };
 
 }  // namespace redis
