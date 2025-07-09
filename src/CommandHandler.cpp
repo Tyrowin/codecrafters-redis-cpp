@@ -45,6 +45,9 @@ std::string CommandHandler::handleCommand(
   } else if (cmd == "REPLCONF") {
     return handleReplconf(
         std::vector<std::string>(command.begin() + 1, command.end()));
+  } else if (cmd == "PSYNC") {
+    return handlePsync(
+        std::vector<std::string>(command.begin() + 1, command.end()));
   } else {
     return RESPParser::encodeError("ERR unknown command '" + command[0] + "'");
   }
@@ -178,6 +181,22 @@ std::string CommandHandler::handleReplconf(
   // For the purposes of this challenge, we ignore the arguments
   // and just respond with +OK\r\n
   return RESPParser::encodeSimpleString("OK");
+}
+
+std::string CommandHandler::handlePsync(const std::vector<std::string>& args) {
+  // PSYNC expects 2 arguments: replication_id and offset
+  if (args.size() != 2) {
+    return RESPParser::encodeError(
+        "ERR wrong number of arguments for 'psync' command");
+  }
+
+  // For full resynchronization, we respond with:
+  // +FULLRESYNC <REPL_ID> 0\r\n
+  std::string replId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+  std::string offset = "0";
+  std::string response = "FULLRESYNC " + replId + " " + offset;
+
+  return RESPParser::encodeSimpleString(response);
 }
 
 }  // namespace redis
